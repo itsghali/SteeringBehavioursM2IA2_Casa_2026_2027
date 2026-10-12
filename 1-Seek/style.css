@@ -21,6 +21,17 @@ html, body {
   accent-color: #89b4ff;
 }
 
+#max-speed, #max-force {
+  width: clamp(100px, 15vw, 180px);
+  min-height: 28px;
+  accent-color: #89b4ff;
+}
+
+#controls output {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+}
+
 #vehicle-count-value {
   min-width: 80px;
   font-variant-numeric: tabular-nums;

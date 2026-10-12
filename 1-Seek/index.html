@@ -3,12 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seek — population de véhicules</title>
+    <title>Seek — cible autonome et paramètres de pilotage</title>
     <link rel="stylesheet" href="style.css">
     <script src="libraries/p5.min.js"></script>
     <script src="vehicle.js"></script>
     <script src="population.js"></script>
-    <script src="mouseTarget.js"></script>
+    <script src="settings.js"></script>
+    <script src="background.js"></script>
+    <script src="target.js"></script>
     <script src="sketch.js"></script>
   </head>
   <body>
@@ -16,7 +18,13 @@
       <label for="vehicle-count">Véhicules :</label>
       <input id="vehicle-count" type="range" min="1" max="200" step="1" value="20">
       <output id="vehicle-count-value" for="vehicle-count">20 / 200</output>
-      <span class="hint">Déplacez la souris dans la scène pour guider la cible rouge.</span>
+      <label for="max-speed">Vitesse max :</label>
+      <input id="max-speed" type="range" min="0" max="20" step="0.1" value="4">
+      <output id="max-speed-value" for="max-speed">4</output>
+      <label for="max-force">Force max :</label>
+      <input id="max-force" type="range" min="0" max="10" step="0.1" value="0.1">
+      <output id="max-force-value" for="max-force">0.1</output>
+      <span class="hint">Les véhicules suivent la cible autonome rouge.</span>
     </header>
     <main id="scene" aria-label="Simulation de véhicules poursuivant une cible"></main>
   </body>

@@ -17,10 +17,10 @@ class Vector {
 function scene(w = 800, h = 600) {
   const context = vm.createContext({ createVector: (x, y) => new Vector(x, y),
     p5: { Vector }, width: w, height: h });
-  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js']) {
+  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js']) {
     vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   }
-  return vm.runInContext('({ Vehicle, MouseTarget, population: SeekPopulation })', context);
+  return vm.runInContext('({ Vehicle, MouseTarget, population: SeekPopulation, settings: VehicleSettings })', context);
 }
 const rng = () => 0.1;
 const target = new Vector(400, 300);
@@ -138,4 +138,27 @@ test('population : arrivées simultanées et véhicules supprimés non mis à jo
 test('MouseTarget hérite de Vehicle et garde le rayon visuel attendu', () => {
   const { Vehicle, MouseTarget } = scene(); const t = new MouseTarget(50, 60);
   assert.ok(t instanceof Vehicle); assert.equal(t.r, 16); assert.equal(t.vel.mag(), 0);
+});
+
+test('curseurs : bornes et application immédiate aux véhicules', () => {
+  const { Vehicle, settings } = scene();
+  const vehicles = [new Vehicle(0, 0), new Vehicle(1, 1)];
+  settings.apply(vehicles, 20, 10);
+  assert.ok(vehicles.every(v => v.maxSpeed === 20 && v.maxForce === 10));
+  settings.apply(vehicles, 0, 0);
+  assert.ok(vehicles.every(v => v.maxSpeed === 0 && v.maxForce === 0));
+  for (const [speed, force] of [[-0.1, 1], [20.1, 1], [1, -0.1], [1, 10.1], ['bad', 1]]) {
+    assert.throws(() => settings.apply(vehicles, speed, force), { name: 'RangeError' });
+  }
+});
+
+test('les curseurs ne modifient pas la cible ni le calcul de seek', () => {
+  const { Vehicle, settings } = scene();
+  const vehicle = new Vehicle(0, 0);
+  const target = new Vector(100, 0);
+  settings.apply([vehicle], 8, 2);
+  const force = vehicle.seek(target);
+  assert.equal(target.x, 100);
+  assert.ok(force.mag() <= 2 + 1e-12);
+  assert.equal(vehicle.maxSpeed, 8);
 });
