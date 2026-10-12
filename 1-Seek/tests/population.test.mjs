@@ -13,14 +13,15 @@ class Vector {
   setMag(n) { const m = this.mag(); return m ? this.mult(n / m) : this; }
   limit(n) { return this.mag() > n ? this.setMag(n) : this; }
   static sub(a, b) { return new Vector(a.x - b.x, a.y - b.y); }
+  static random2D() { return new Vector(1, 0); }
 }
 function scene(w = 800, h = 600) {
   const context = vm.createContext({ createVector: (x, y) => new Vector(x, y),
-    p5: { Vector }, width: w, height: h });
-  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js', 'flee.js']) {
+    p5: { Vector }, random: (min, max) => min, width: w, height: h });
+  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js', 'flee.js', 'target.js']) {
     vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   }
-  return vm.runInContext('({ Vehicle, MouseTarget, population: SeekPopulation, settings: VehicleSettings, flee: FleeBehavior })', context);
+  return vm.runInContext('({ Vehicle, Target, MouseTarget, population: SeekPopulation, settings: VehicleSettings, flee: FleeBehavior })', context);
 }
 const rng = () => 0.1;
 const target = new Vector(400, 300);
@@ -138,6 +139,23 @@ test('population : arrivées simultanées et véhicules supprimés non mis à jo
 test('MouseTarget hérite de Vehicle et garde le rayon visuel attendu', () => {
   const { Vehicle, MouseTarget } = scene(); const t = new MouseTarget(50, 60);
   assert.ok(t instanceof Vehicle); assert.equal(t.r, 16); assert.equal(t.vel.mag(), 0);
+});
+
+test('Target circulaire : direction initiale, locomotion Vehicle et traversée du canvas', () => {
+  const { Vehicle, Target } = scene();
+  const target = new Target(850, 200);
+  assert.ok(target instanceof Vehicle);
+  assert.equal(target.r, 50);
+  assert.equal(target.vel.x, 1);
+  assert.equal(target.vel.y, 0);
+  target.update();
+  target.edges();
+  assert.equal(target.pos.x, -target.r);
+  target.pos.set(400, 650);
+  target.vel.set(0, 6);
+  target.update();
+  target.edges();
+  assert.equal(target.pos.y, -target.r);
 });
 
 test('curseurs : bornes et application immédiate aux véhicules', () => {
