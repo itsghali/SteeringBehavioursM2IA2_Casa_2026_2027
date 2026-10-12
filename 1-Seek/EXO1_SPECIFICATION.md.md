@@ -17,7 +17,12 @@ Les fonctionnalités demandées sont :
 
 ## Task 4 — fuite avec rayon de détection
 
-Le mode `Flee` est sélectionnable dans l'interface. Le rayon de détection est fixé à **150 px** autour de la cible et est représenté par un cercle lorsque le mode est actif.
+Le mode `Flee` est sélectionnable dans l'interface. Le rayon de détection est fixé à **100 px** autour de la cible et est représenté par un cercle lorsque le mode est actif.
+
+Deux configurations sont proposées :
+
+- plusieurs vaisseaux fuient une cible autonome commune ;
+- un seul vaisseau fuit cinq cibles autonomes. Les forces calculées autour des cibles sont additionnées puis limitées globalement à `maxForce`.
 
 Dans ce rayon, le véhicule calcule une vitesse désirée opposée à la cible :
 
@@ -28,7 +33,9 @@ steering = desiredVelocity - vitesseActuelle
 steering.limit(maxForce)
 ```
 
-À plus de 150 px de la cible, la force de fuite est nulle : le véhicule ne fuit donc pas indéfiniment. Le calcul est appliqué avec `applyForce`; aucun déplacement direct n'est effectué par le comportement. Le mode `Flee` ne déclenche pas la réapparition d'arrivée propre au mode `Seek`.
+À plus de 100 px de la cible, la force de fuite est nulle : le véhicule ne fuit donc pas indéfiniment. Le calcul est appliqué avec `applyForce`; aucun déplacement direct n'est effectué par le comportement. Le mode `Flee` ne déclenche pas la réapparition d'arrivée propre au mode `Seek`.
+
+Pour éviter que les nouveaux vaisseaux au repos restent figés hors du rayon, l'entrée dans un scénario `Flee` leur attribue une petite vitesse initiale aléatoire, bornée par `maxSpeed`. Cette initialisation n'est pas une force de steering et n'est pas répétée pour un vaisseau qui possède déjà une vitesse.
 
 Le texte d'aide suit le mode sélectionné : « Les véhicules suivent la cible autonome rouge » en mode `Seek`, et « Les véhicules fuient la cible autonome rouge » en mode `Flee`.
 

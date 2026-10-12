@@ -177,7 +177,7 @@ test('flee : force opposée, limitée et cible intacte', () => {
 test('flee : cible éloignée, distance nulle et composition locomotrice', () => {
   const { Vehicle, flee } = scene();
   const vehicle = new Vehicle(0, 0); vehicle.vel.set(3, 0);
-  assert.equal(flee.DETECTION_RADIUS, 150);
+  assert.equal(flee.DETECTION_RADIUS, 100);
   const far = flee.calculate(vehicle, new Vector(1000, 0));
   assert.equal(far.mag(), 0);
   const near = flee.calculate(vehicle, new Vector(100, 0));
@@ -186,4 +186,25 @@ test('flee : cible éloignée, distance nulle et composition locomotrice', () =>
   assert.ok(Number.isFinite(overlap.x) && Number.isFinite(overlap.y));
   vehicle.applyForce(overlap); vehicle.update();
   assert.ok(vehicle.vel.mag() <= vehicle.maxSpeed + 1e-12);
+});
+
+test('flee combiné : plusieurs cibles, force résultante limitée', () => {
+  const { Vehicle, flee } = scene();
+  const vehicle = new Vehicle(0, 0); vehicle.maxSpeed = 8; vehicle.maxForce = 1;
+  const targets = [new Vector(100, 0), new Vector(0, 100)];
+  const force = flee.calculateCombined(vehicle, targets);
+  assert.ok(force.x < 0 && force.y < 0);
+  assert.ok(force.mag() <= vehicle.maxForce + 1e-12);
+  assert.deepEqual([targets[0].x, targets[0].y, targets[1].x, targets[1].y], [100, 0, 0, 100]);
+});
+
+test('flee : les véhicules au repos reçoivent un mouvement initial hors rayon', () => {
+  const { Vehicle, flee } = scene();
+  const vehicles = [new Vehicle(0, 0), new Vehicle(10, 10)];
+  flee.ensureMotion(vehicles, () => new Vector(1, 0));
+  assert.ok(vehicles.every(vehicle => vehicle.vel.mag() > 0));
+  assert.ok(vehicles.every(vehicle => vehicle.vel.mag() <= vehicle.maxSpeed));
+  const stopped = new Vehicle(0, 0); stopped.maxSpeed = 0;
+  flee.ensureMotion([stopped], () => new Vector(1, 0));
+  assert.equal(stopped.vel.mag(), 0);
 });

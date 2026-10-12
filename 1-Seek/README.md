@@ -5,7 +5,7 @@ Ouvrir `index.html` dans un navigateur (ou servir ce dossier avec un serveur HTT
 - 20 véhicules au démarrage, réglables de 1 à 200 avec le slider, pendant le glissement.
 - Les véhicules suivent la cible rouge autonome ; la souris ne pilote plus la cible.
 - Les curseurs règlent en direct `maxSpeed` entre 0 et 20 et `maxForce` entre 0 et 10.
-- Le sélecteur permet de comparer `Seek` (suivre) et `Flee` (s'éloigner) de la cible.
+- Le sélecteur permet de comparer `Seek`, `Flee` avec plusieurs vaisseaux et une cible, et `Flee` avec un vaisseau et plusieurs cibles.
 - Un gradient radial arc-en-ciel animé est rendu en arrière-plan.
 - Les véhicules réapparaissent au bord opposé grâce à `Vehicle.edges()`.
 - À 16 px ou moins de la cible, le véhicule réapparaît ailleurs avec une vitesse et une accélération nulles.
