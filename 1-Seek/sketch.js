@@ -3,6 +3,7 @@ const vehicles = [];
 let sceneCanvas;
 let maxSpeedSlider;
 let maxForceSlider;
+let behaviorMode;
 
 function sceneHeight() {
   return Math.max(1, windowHeight - document.getElementById('controls').offsetHeight);
@@ -25,6 +26,9 @@ function setup() {
 
   maxSpeedSlider = document.getElementById('max-speed');
   maxForceSlider = document.getElementById('max-force');
+  behaviorMode = document.getElementById('behavior-mode');
+  behaviorMode.addEventListener('change', updateBehaviorHint);
+  updateBehaviorHint();
   bindVehicleSetting(maxSpeedSlider, document.getElementById('max-speed-value'), 'maxSpeed');
   bindVehicleSetting(maxForceSlider, document.getElementById('max-force-value'), 'maxForce');
   VehicleSettings.apply(vehicles, maxSpeedSlider.value, maxForceSlider.value);
@@ -34,8 +38,13 @@ function draw() {
   drawAnimatedRadialGradient(millis(), width, height);
   target.update();
   target.edges();
+  const fleeing = behaviorMode.value === 'flee';
+  if (fleeing) drawFleeRadius();
+  const steering = fleeing
+    ? (vehicle, goal) => FleeBehavior.calculate(vehicle, goal)
+    : (vehicle, goal) => vehicle.seek(goal);
   for (const vehicle of vehicles) {
-    SeekPopulation.step(vehicle, target.pos, width, height);
+    SeekPopulation.step(vehicle, target.pos, width, height, Math.random, steering, !fleeing);
     vehicle.show();
   }
   target.show();
@@ -56,4 +65,20 @@ function bindVehicleSetting(slider, output, property) {
   };
   slider.addEventListener('input', update);
   update();
+}
+
+function updateBehaviorHint() {
+  const hint = document.getElementById('behavior-hint');
+  hint.textContent = behaviorMode.value === 'flee'
+    ? 'Les véhicules fuient la cible autonome rouge.'
+    : 'Les véhicules suivent la cible autonome rouge.';
+}
+
+function drawFleeRadius() {
+  push();
+  noFill();
+  stroke(255, 190);
+  strokeWeight(1);
+  circle(target.pos.x, target.pos.y, FleeBehavior.DETECTION_RADIUS * 2);
+  pop();
 }

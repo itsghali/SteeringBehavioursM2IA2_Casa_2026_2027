@@ -64,15 +64,16 @@ const SeekPopulation = (() => {
     return true;
   }
 
-  function step(vehicle, target, w, h, rng = Math.random) {
-    if (hasArrived(vehicle, target)) {
+  function step(vehicle, target, w, h, rng = Math.random,
+    steering = (agent, goal) => agent.seek(goal), resetOnArrival = true) {
+    if (resetOnArrival && hasArrived(vehicle, target)) {
       respawn(vehicle, target, w, h, rng);
       return;
     }
-    vehicle.applyBehaviors(target);
+    vehicle.applyForce(steering(vehicle, target));
     vehicle.update();
     vehicle.edges();
-    if (hasArrived(vehicle, target)) respawn(vehicle, target, w, h, rng);
+    if (resetOnArrival && hasArrived(vehicle, target)) respawn(vehicle, target, w, h, rng);
   }
 
   function bindSlider(slider, output, vehicles, target, dimensions, createVehicle, rng = Math.random) {

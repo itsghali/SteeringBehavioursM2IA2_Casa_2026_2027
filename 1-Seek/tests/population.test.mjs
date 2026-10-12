@@ -17,10 +17,10 @@ class Vector {
 function scene(w = 800, h = 600) {
   const context = vm.createContext({ createVector: (x, y) => new Vector(x, y),
     p5: { Vector }, width: w, height: h });
-  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js']) {
+  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js', 'flee.js']) {
     vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   }
-  return vm.runInContext('({ Vehicle, MouseTarget, population: SeekPopulation, settings: VehicleSettings })', context);
+  return vm.runInContext('({ Vehicle, MouseTarget, population: SeekPopulation, settings: VehicleSettings, flee: FleeBehavior })', context);
 }
 const rng = () => 0.1;
 const target = new Vector(400, 300);
@@ -161,4 +161,29 @@ test('les curseurs ne modifient pas la cible ni le calcul de seek', () => {
   assert.equal(target.x, 100);
   assert.ok(force.mag() <= 2 + 1e-12);
   assert.equal(vehicle.maxSpeed, 8);
+});
+
+test('flee : force opposée, limitée et cible intacte', () => {
+  const { Vehicle, flee } = scene();
+  const vehicle = new Vehicle(10, 0);
+  vehicle.maxSpeed = 8; vehicle.maxForce = 2; vehicle.vel.set(0, 1);
+  const target = new Vector(0, 0);
+  const force = flee.calculate(vehicle, target);
+  assert.ok(force.x > 0);
+  assert.ok(force.mag() <= vehicle.maxForce + 1e-12);
+  assert.deepEqual([target.x, target.y], [0, 0]);
+});
+
+test('flee : cible éloignée, distance nulle et composition locomotrice', () => {
+  const { Vehicle, flee } = scene();
+  const vehicle = new Vehicle(0, 0); vehicle.vel.set(3, 0);
+  assert.equal(flee.DETECTION_RADIUS, 150);
+  const far = flee.calculate(vehicle, new Vector(1000, 0));
+  assert.equal(far.mag(), 0);
+  const near = flee.calculate(vehicle, new Vector(100, 0));
+  assert.ok(near.mag() > 0);
+  const overlap = flee.calculate(vehicle, new Vector(0, 0));
+  assert.ok(Number.isFinite(overlap.x) && Number.isFinite(overlap.y));
+  vehicle.applyForce(overlap); vehicle.update();
+  assert.ok(vehicle.vel.mag() <= vehicle.maxSpeed + 1e-12);
 });
