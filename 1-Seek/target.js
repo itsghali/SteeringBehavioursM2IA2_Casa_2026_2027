@@ -5,10 +5,12 @@ class Target extends Vehicle {
     this.r = 50;
     this.color = 'red';
     this.maxSpeed = 6;
+    this.detectionRadius = FleeBehavior.DETECTION_RADIUS;
     this.vel = p5.Vector.random2D().setMag(random(1, this.maxSpeed));
   }
 
   update() {
+    this.applyForce(TargetAcceleration.calculate(this));
     super.update();
   }
 

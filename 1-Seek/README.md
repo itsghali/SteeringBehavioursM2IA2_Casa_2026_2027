@@ -1,26 +1,49 @@
-# Seek — cible autonome, population et paramètres de pilotage
+# Seek / Flee — cibles autonomes
 
-Ouvrir `index.html` dans un navigateur (ou servir ce dossier avec un serveur HTTP local).
+Ouvrir `index.html` dans un navigateur ou servir ce dossier avec un serveur HTTP local.
 
-- 20 véhicules au démarrage, réglables de 1 à 200 avec le slider, pendant le glissement.
-- Les véhicules suivent la cible rouge autonome ; la souris ne pilote plus la cible.
-- Les curseurs règlent en direct `maxSpeed` entre 0 et 20 et `maxForce` entre 0 et 10.
-- Le sélecteur permet de comparer `Seek`, `Flee` avec plusieurs vaisseaux et une cible, et `Flee` avec un vaisseau et plusieurs cibles.
-- Un gradient radial arc-en-ciel animé est rendu en arrière-plan.
-- Les véhicules réapparaissent au bord opposé grâce à `Vehicle.edges()`.
-- À 16 px ou moins de la cible, le véhicule réapparaît ailleurs avec une vitesse et une accélération nulles.
-- Les véhicules conservés lors d'un changement d'effectif gardent leur état.
+- Flee au démarrage : 20 vaisseaux et une cible rouge autonome.
+- Vaisseaux : curseur de 1 à 200, actif dans tous les modes.
+- Cibles Flee : curseur de 1 à 20, actif dans les deux modes Flee.
+- Rayon de détection des cibles : 0 à 300 px, cercle blanc. À 0, fuite désactivée.
+- Les cibles accélèrent automatiquement dans leur direction jusqu'à 6 px/image,
+  avec une force maximale de 0,1. Une cible au repos repart vers +x.
+- Distance de sécurité : 300 px entre les centres, cercle orange.
+- Dans le rayon de détection, vitesse désirée à la moitié de `maxSpeed` à
+  300 px ou plus, puis augmentation linéaire jusqu'à `maxSpeed` à distance nulle.
+  L'accélération respecte `maxForce` ; la locomotion reste celle de Vehicle.
+- Superposition : fuite dans la direction courante, ou vers +x au repos.
+- Cibles multiples : somme des forces de fuite, limitée à `maxForce`.
+- Hors détection : force de fuite nulle, vitesse existante conservée.
+- Vitesse max : 0 à 20 ; force max : 0 à 10. Réglages immédiats.
+- Réglages initiaux des vaisseaux : vitesse max 14, force max 0,6. La vitesse
+  désirée de fuite vaut donc 7 à 14 px/image face aux cibles limitées à 6.
+- Seek suit seulement la première cible ; réglages propres à Flee désactivés.
+- Changer de mode conserve les effectifs et les instances existantes.
+- Les entités traversent les bords avec `Vehicle.edges()`.
+- Seek seulement : réapparition des vaisseaux à 16 px ou moins de la cible.
 
-`vehicle.js` et `target.js` restent inchangés. `MouseTarget` remplace la cible autonome pour cette scène. Les fonctions de gestion de population sont dans `population.js` ; la boucle p5 et les interactions sont dans `sketch.js`.
+La sécurité est une zone de réaction. La séparation réelle dépend de la vitesse,
+de la force et des cibles environnantes ; des forces opposées peuvent s'annuler.
+Le pilotage suit le modèle Reynolds : vitesse désirée moins vitesse courante,
+force limitée puis locomotion séparée.
+
+`vehicle.js` reste inchangé. `Ship` (`ship.js`) et `Target` héritent de `Vehicle`.
+`Ship.steering()` choisit Seek ou Flee ; dessin et locomotion restent hérités.
+`flee.js` calcule les
+forces ; `targetAcceleration.js` calcule l'accélération autonome des cibles ;
+`fleeControls.js` gère les réglages des cibles ; `population.js` gère
+les vaisseaux ; `sketch.js` compose les comportements et relie les curseurs.
 
 ## Tests
 
-Depuis ce dossier, avec Node.js (18 ou plus) :
+Depuis la racine du dépôt, Node.js 18 ou plus :
 
 ```sh
-node --test tests/*.test.mjs
+node --test 1-Seek/tests/*.test.mjs
 ```
 
-Aucune dépendance à installer. Les tests exécutent le vrai `vehicle.js` avec un adaptateur vectoriel minimal et un aléatoire déterministe. La validation du rendu avec p5 et du glissement réel se fait également dans le navigateur.
-
-La [spécification](EXO1_SPECIFICATION.md.md) décrit les quatre tâches demandées, les bornes et les critères de validation.
+Aucune dépendance à installer. Tests du vrai `vehicle.js` avec adaptateur vectoriel
+et aléatoire déterministe : forces, accélération, limites, proximité, composition,
+effectifs, curseurs et changements de mode. Les tests de scène simulent le DOM
+et les appels de dessin ; ils ne constituent pas une vérification visuelle du navigateur.

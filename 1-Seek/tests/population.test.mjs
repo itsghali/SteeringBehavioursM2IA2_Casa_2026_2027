@@ -15,16 +15,201 @@ class Vector {
   static sub(a, b) { return new Vector(a.x - b.x, a.y - b.y); }
   static random2D() { return new Vector(1, 0); }
 }
-function scene(w = 800, h = 600) {
+function scene(w = 800, h = 600, globals = {}) {
   const context = vm.createContext({ createVector: (x, y) => new Vector(x, y),
-    p5: { Vector }, random: (min, max) => min, width: w, height: h });
-  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js', 'flee.js', 'target.js']) {
+    p5: { Vector }, random: (min, max) => min, width: w, height: h, ...globals });
+  for (const file of ['vehicle.js', 'population.js', 'mouseTarget.js', 'settings.js', 'flee.js', 'ship.js', 'fleeControls.js', 'targetAcceleration.js', 'target.js']) {
     vm.runInContext(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), context);
   }
-  return vm.runInContext('({ Vehicle, Target, MouseTarget, population: SeekPopulation, settings: VehicleSettings, flee: FleeBehavior })', context);
+  const api = vm.runInContext('({ Vehicle, Ship, Target, MouseTarget, population: SeekPopulation, settings: VehicleSettings, flee: FleeBehavior, controls: FleeControls, acceleration: TargetAcceleration })', context);
+  return { ...api, context };
 }
 const rng = () => 0.1;
 const target = new Vector(400, 300);
+
+test('Ship hérite de Vehicle et choisit Seek/Flee sans dupliquer la locomotion', () => {
+  const { Ship, Vehicle, Target, population } = scene();
+  const ship = new Ship(200, 300); const threat = new Target(100, 300);
+  assert.ok(ship instanceof Vehicle);
+  assert.equal(Ship.prototype.update, Vehicle.prototype.update);
+  assert.equal(Ship.prototype.show, Vehicle.prototype.show);
+  assert.ok(ship.steering('seek', [threat]).x < 0);
+  assert.ok(ship.steering('flee', [threat]).x > 0);
+  assert.ok(ship.steering('flee-many', [threat]).x > 0);
+  population.step(ship, threat.pos, 800, 600, rng,
+    agent => agent.steering('flee', [threat]), false);
+  assert.ok(ship.pos.x > 200); assert.equal(ship.acc.mag(), 0);
+  threat.detectionRadius = 50; assert.equal(ship.steering('flee', [threat]).mag(), 0);
+});
+
+test('Flee réel : réglages HTML permettent de distancer une cible mobile à 6 px/image', () => {
+  const { Ship, Target, population, settings, flee } = scene(10000, 10000);
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const defaultValue = id => Number(html.match(new RegExp(`<input[^>]*id="${id}"[^>]*value="([^"]+)"`))[1]);
+  const threat = new Target(0, 500); threat.vel.set(threat.maxSpeed, 0);
+  const ship = new Ship(150, 500);
+  settings.apply([ship], defaultValue('max-speed'), defaultValue('max-force'));
+  flee.ensureMotion([ship], () => new Vector(1, 0));
+  assert.ok(flee.desiredSpeed(ship, 300) >= threat.maxSpeed);
+  for (let frame = 0; frame < 120; frame++) {
+    threat.update();
+    population.step(ship, threat.pos, 10000, 10000, rng,
+      agent => agent.steering('flee', [threat]), false);
+    assert.ok(ship.pos.x - threat.pos.x >= 150, 'La cible rattrape le vaisseau');
+    assert.ok(ship.vel.mag() <= ship.maxSpeed + 1e-12);
+  }
+  assert.ok(ship.pos.x - threat.pos.x >= 300);
+});
+
+test('cible : accélération automatique bornée, direction et locomotion conservées', () => {
+  const { Target, acceleration } = scene();
+  const t = new Target(100, 100); t.vel.set(0, 1);
+  const position = [t.pos.x, t.pos.y];
+  const force = acceleration.calculate(t);
+  assert.equal(force.x, 0); assert.ok(force.y > 0);
+  assert.ok(force.mag() <= t.maxForce + 1e-12);
+  assert.deepEqual([t.pos.x, t.pos.y, t.vel.x, t.vel.y], [...position, 0, 1]);
+  t.update();
+  assert.equal(t.vel.x, 0); assert.ok(Math.abs(t.vel.y - 1.1) < 1e-12);
+  assert.equal(t.pos.x, 100); assert.ok(Math.abs(t.pos.y - 101.1) < 1e-12);
+  assert.equal(t.acc.mag(), 0);
+  let previousSpeed = t.vel.mag();
+  for (let frame = 0; frame < 100; frame++) {
+    t.update();
+    assert.ok(t.vel.mag() >= previousSpeed - 1e-12);
+    assert.ok(t.vel.mag() <= t.maxSpeed + 1e-12);
+    previousSpeed = t.vel.mag();
+  }
+  assert.equal(t.vel.mag(), 6); assert.equal(acceleration.calculate(t).mag(), 0);
+  t.vel.set(0, 0); t.update(); assert.ok(t.vel.x > 0); assert.equal(t.vel.y, 0);
+  t.vel.set(0, 0); t.maxForce = 0; t.update(); assert.equal(t.vel.mag(), 0);
+  t.maxForce = 0.1; t.maxSpeed = 0; t.update(); assert.equal(t.vel.mag(), 0);
+});
+
+test('détection : 0 désactive la fuite même en superposition ; bornes HTML 0–300', () => {
+  const { Vehicle, flee } = scene();
+  const v = new Vehicle(0, 0);
+  for (const pos of [new Vector(0, 0), new Vector(1, 0)]) {
+    assert.equal(flee.calculate(v, pos, 0).mag(), 0);
+    assert.equal(flee.calculateCombined(v, [{ pos, detectionRadius: 0 }]).mag(), 0);
+  }
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const input = html.match(/<input[^>]*id="detection-radius"[^>]*>/)[0];
+  assert.match(input, /min="0"/); assert.match(input, /max="300"/);
+});
+
+test('flee : sécurité 300 px, accélération progressive, superposition et plafonds', () => {
+  const { Vehicle, flee, population } = scene();
+  const v = new Vehicle(150, 0); v.maxSpeed = 8; v.maxForce = 10;
+  assert.equal(flee.SAFETY_DISTANCE, 300);
+  assert.deepEqual([600, 300, 150, 0].map(d => flee.desiredSpeed(v, d)), [4, 4, 6, 8]);
+  v.vel.set(4, 0);
+  assert.equal(flee.calculate(v, new Vector(0, 0)).x, 2);
+  population.step(v, new Vector(0, 0), 800, 600, rng,
+    (agent, goal) => flee.calculate(agent, goal), false);
+  assert.equal(v.vel.mag(), 6); assert.equal(v.pos.x, 156); assert.equal(v.acc.mag(), 0);
+  v.pos.set(0, 0); v.vel.set(0, 0);
+  assert.equal(flee.calculate(v, new Vector(0, 0)).x, 8);
+  v.maxForce = 0.1;
+  assert.ok(flee.calculate(v, new Vector(0.001, 0)).mag() <= 0.1 + 1e-12);
+  v.maxForce = 0; assert.equal(flee.calculate(v, new Vector(0, 0)).mag(), 0);
+  v.maxSpeed = 0; v.maxForce = 1;
+  assert.equal(flee.calculate(v, new Vector(0, 0)).mag(), 0);
+});
+
+test('flee : rayon inclusif et propre aux cibles, composition symétrique', () => {
+  const { Vehicle, flee } = scene();
+  const v = new Vehicle(0, 0); v.maxForce = 10;
+  assert.ok(flee.calculate(v, new Vector(300, 0)).x < 0);
+  assert.equal(flee.calculate(v, new Vector(300.001, 0)).mag(), 0);
+  const t = { pos: new Vector(200, 0), detectionRadius: 100 };
+  assert.equal(flee.calculateCombined(v, [t]).mag(), 0);
+  t.detectionRadius = 200;
+  assert.equal(flee.calculateCombined(v, [t]).x, -flee.desiredSpeed(v, 200));
+  assert.equal(flee.calculateCombined(v, [new Vector(-100, 0), new Vector(100, 0)]).mag(), 0);
+  assert.equal(flee.calculateCombined(v, []).mag(), 0);
+  v.maxForce = 0.1;
+  assert.ok(flee.calculateCombined(v, [t, { pos: new Vector(0, 100), detectionRadius: 300 }]).mag() <= 0.1 + 1e-12);
+});
+
+test('cibles : effectifs, rayon, états conservés, entrées invalides sans mutation', () => {
+  const { Target, controls } = scene();
+  const targets = [];
+  const resize = (count, radius = 300) => controls.resizeTargets(targets, count, () => new Target(10, 20), radius);
+  assert.equal(resize(1), '1 / 20');
+  const first = targets[0]; first.vel.set(2, 3);
+  resize(20, 300); assert.equal(targets.length, 20);
+  assert.equal(targets[0], first); assert.equal(first.vel.y, 3);
+  assert.ok(targets.every(t => t.detectionRadius === 300));
+  assert.equal(controls.applyRadius(targets, 150), '150 px');
+  assert.ok(targets.every(t => t.detectionRadius === 150));
+  assert.equal(controls.applyRadius(targets, 0), '0 px');
+  assert.ok(targets.every(t => t.detectionRadius === 0));
+  resize(1); assert.equal(targets[0], first);
+  for (const n of [0, 21, 1.5, NaN]) assert.throws(() => resize(n), { name: 'RangeError' });
+  for (const radius of [-1, 301, NaN]) {
+    assert.throws(() => resize(2, radius), { name: 'RangeError' });
+    assert.throws(() => controls.applyRadius(targets, radius), { name: 'RangeError' });
+    assert.equal(targets.length, 1); assert.equal(first.detectionRadius, 300);
+  }
+});
+
+test('scène : curseurs Flee, nouvelles entités, modes et cercles cohérents', () => {
+  const elements = {};
+  const values = { 'vehicle-count': '20', 'target-count': '1', 'detection-radius': '300',
+    'max-speed': '8', 'max-force': '0.5', 'behavior-mode': 'flee' };
+  for (const [id, value] of Object.entries(values)) {
+    elements[id] = { value, events: {}, addEventListener(name, fn) {
+      (this.events[name] ??= []).push(fn);
+    }, emit(name) { for (const fn of this.events[name] ?? []) fn(); } };
+    elements[`${id}-value`] = {};
+  }
+  elements.controls = { offsetHeight: 100 }; elements['behavior-hint'] = {};
+  const circles = [];
+  const { context, Ship, Vehicle } = scene(800, 600, {
+    document: { getElementById: id => elements[id] }, windowWidth: 800, windowHeight: 700,
+    createCanvas: () => ({ parent() {} }), push() {}, pop() {}, noFill() {}, stroke() {},
+    strokeWeight() {}, circle: (...args) => circles.push(args),
+    drawAnimatedRadialGradient() {}, millis: () => 0,
+  });
+  vm.runInContext(readFileSync(new URL('../sketch.js', import.meta.url), 'utf8'), context);
+  vm.runInContext('setup()', context);
+  const state = () => vm.runInContext('({ vehicles, targets })', context);
+  assert.equal(elements['target-count'].disabled, false);
+  assert.ok(state().vehicles.every(v => v.vel.mag() > 0));
+  assert.ok(state().vehicles.every(v => v instanceof Ship && v instanceof Vehicle));
+  const originalVehicle = state().vehicles[0]; const originalTarget = state().targets[0];
+  elements['detection-radius'].value = '150'; elements['detection-radius'].emit('input');
+  elements['target-count'].value = '5'; elements['target-count'].emit('input');
+  assert.equal(state().targets.length, 5); assert.equal(state().targets[0], originalTarget);
+  assert.ok(state().targets.every(t => t.detectionRadius === 150));
+  assert.equal(elements['detection-radius-value'].value, '150 px');
+  elements['vehicle-count'].value = '30'; elements['vehicle-count'].emit('input');
+  assert.equal(state().vehicles.length, 30); assert.equal(state().vehicles[0], originalVehicle);
+  assert.ok(state().vehicles.every(v => v.maxSpeed === 8 && v.maxForce === 0.5 && v.vel.mag() > 0));
+  vm.runInContext('drawFleeRadius(targets)', context);
+  assert.deepEqual(circles.map(c => c[2]), [300, 300, 300, 300, 300, 600, 600, 600, 600, 600]);
+  for (const mode of ['seek', 'flee-many', 'flee']) {
+    elements['behavior-mode'].value = mode; elements['behavior-mode'].emit('change');
+    assert.equal(state().vehicles.length, 30); assert.equal(state().targets.length, 5);
+    assert.notEqual(elements['vehicle-count'].disabled, true);
+    assert.equal(elements['target-count'].disabled, mode === 'seek');
+    assert.equal(elements['detection-radius'].disabled, mode === 'seek');
+  }
+  elements['detection-radius'].value = '0'; elements['detection-radius'].emit('input');
+  assert.ok(state().targets.every(t => t.detectionRadius === 0));
+  assert.equal(elements['detection-radius-value'].value, '0 px');
+  elements['target-count'].value = '1'; elements['target-count'].emit('input');
+  assert.equal(state().targets.length, 1); assert.equal(state().targets[0], originalTarget);
+  elements['detection-radius'].value = '300'; elements['detection-radius'].emit('input');
+  for (const v of state().vehicles) v.show = () => {};
+  for (const t of state().targets) t.show = () => {};
+  originalVehicle.pos.set(originalTarget.pos.x + 150, originalTarget.pos.y);
+  originalVehicle.vel.set(0, 0);
+  const before = originalVehicle.pos.x;
+  vm.runInContext('draw()', context);
+  assert.ok(originalVehicle.pos.x > before, 'La boucle réelle draw doit appliquer Flee');
+});
 
 test('population : bornes, conservation des instances et valeurs invalides', () => {
   const { Vehicle, population: p } = scene();
@@ -195,7 +380,7 @@ test('flee : force opposée, limitée et cible intacte', () => {
 test('flee : cible éloignée, distance nulle et composition locomotrice', () => {
   const { Vehicle, flee } = scene();
   const vehicle = new Vehicle(0, 0); vehicle.vel.set(3, 0);
-  assert.equal(flee.DETECTION_RADIUS, 100);
+  assert.equal(flee.DETECTION_RADIUS, 300);
   const far = flee.calculate(vehicle, new Vector(1000, 0));
   assert.equal(far.mag(), 0);
   const near = flee.calculate(vehicle, new Vector(100, 0));

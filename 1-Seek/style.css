@@ -21,7 +21,7 @@ html, body {
   accent-color: #89b4ff;
 }
 
-#max-speed, #max-force {
+#max-speed, #max-force, #target-count, #detection-radius {
   width: clamp(100px, 15vw, 180px);
   min-height: 28px;
   accent-color: #89b4ff;

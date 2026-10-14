@@ -1,16 +1,26 @@
 // Comportement flee indépendant du véhicule fourni.
 const FleeBehavior = (() => {
-  const DETECTION_RADIUS = 100;
+  const SAFETY_DISTANCE = 300;
+  const DETECTION_RADIUS = SAFETY_DISTANCE;
+
+  // Croisière à mi-vitesse ; accélération progressive dans la zone de sécurité.
+  function desiredSpeed(vehicle, distance) {
+    const urgency = Math.max(0, 1 - distance / SAFETY_DISTANCE);
+    return vehicle.maxSpeed * (0.5 + 0.5 * urgency);
+  }
 
   function calculate(vehicle, target, detectionDistance = DETECTION_RADIUS) {
+    if (detectionDistance <= 0) return createVector(0, 0);
     const offset = p5.Vector.sub(vehicle.pos, target);
     const distance = offset.mag();
     if (distance > detectionDistance) return createVector(0, 0);
 
-    // À distance nulle, aucune direction de fuite n'est définie. On conserve
-    // toutefois une force de freinage valide au lieu de produire des NaN.
-    if (distance === 0) offset.set(0, 0);
-    else offset.setMag(vehicle.maxSpeed);
+    // Superposition : continuer dans la direction courante, ou choisir +x au repos.
+    if (distance === 0) {
+      if (vehicle.vel.mag() > 0) offset.set(vehicle.vel.x, vehicle.vel.y);
+      else offset.set(1, 0);
+    }
+    offset.setMag(desiredSpeed(vehicle, distance));
 
     return p5.Vector.sub(offset, vehicle.vel).limit(vehicle.maxForce);
   }
@@ -19,7 +29,7 @@ const FleeBehavior = (() => {
     const combined = createVector(0, 0);
     for (const target of targets) {
       const position = target.pos ?? target;
-      combined.add(calculate(vehicle, position, detectionDistance));
+      combined.add(calculate(vehicle, position, target.detectionRadius ?? detectionDistance));
     }
     return combined.limit(vehicle.maxForce);
   }
@@ -33,5 +43,5 @@ const FleeBehavior = (() => {
     }
   }
 
-  return { DETECTION_RADIUS, calculate, calculateCombined, ensureMotion };
+  return { SAFETY_DISTANCE, DETECTION_RADIUS, desiredSpeed, calculate, calculateCombined, ensureMotion };
 })();
